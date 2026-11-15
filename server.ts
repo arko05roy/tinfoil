@@ -5,7 +5,7 @@ import { promisify } from "node:util";
 
 const run = promisify(execFile);
 const CHROME = process.env.CHROME ??
-  `${process.env.HOME}/Library/Caches/ms-playwright/chromium-1248/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing`;
+  `${process.env.HOME}/Library/Caches/ms-playwright/chromium_headless_shell-1248/chrome-headless-shell-mac-arm64/chrome-headless-shell`;
 
 const PORT = Number(process.env.PORT ?? 4000);
 
