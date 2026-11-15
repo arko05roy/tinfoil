@@ -7,13 +7,13 @@ Lang: TypeScript, Node 26 (runs .ts natively, no build). Run: `node server.ts` (
 Agent hits our server over HTTP, says "go to this URL", gets the page back as text.
 
 ## Last step
-v3: live browser per session, driven over raw CDP (WebSocket). In-memory Map, dies with server (user's call).
+v3.1: CDP over --remote-debugging-pipe (fd 3/4, \0-delimited) instead of a port. Pipe = browser-level
+connection, so we Target.attachToTarget(flatten) the tab and stamp messages with its sessionId.
+Verified: cookies + live JS state survive; session up in ~139ms; kill -9 on server -> browser dies too.
 Routes: POST /sessions, GET /sessions, POST /sessions/:id/goto?url=, GET .../content, POST .../eval, DELETE.
-Verified: session cookies + live JS state survive across requests; Ctrl+C kills browsers; profiles wiped at boot.
-BROKEN: kill -9 on server -> browser orphaned (parent pid 1).
 
 ## Next step
-User guesses why cleanup didn't run on kill -9, and how a browser could notice its parent died.
+Pick next pressure: real agent actions (click/type) vs. many sessions at once (limits, idle timeout).
 
 ## Concepts discovered
 - client-side rendering vs SSR (curl gets the starting HTML only)
@@ -24,9 +24,11 @@ User guesses why cleanup didn't run on kill -9, and how a browser could notice i
 - CDP: browser runs an API; HTTP lobby + WebSocket per tab; commands (id) vs events (no id)
 - orphan processes (parent dies -> adopted by pid 1)
 - DB = note about the world, not the world -> reconcile
+- SIGKILL cannot be caught; cleanup must live outside the process
+- fate-sharing: pipe mode, OS closes the pipe on parent death, browser exits
+- CDP targets + multiplexing (one connection, sessionId per tab)
 - spawning a process (server launches another program, reads its stdout)
 
 ## Debt
 - Chromium path hardcoded to Playwright cache (override with CHROME env)
-- orphaned browsers on hard crash (kill -9)
-- no session limit / idle timeout; ports just increment from 9300
+- no session limit / idle timeout; no way for external Puppeteer/DevTools to attach (pipe mode)

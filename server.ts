@@ -1,52 +1,60 @@
-// tinfoil v3: a live browser per session, driven over CDP
+// tinfoil v3.1: a live browser per session, driven over CDP on a pipe (dies with us)
 import { createServer, type IncomingMessage } from "node:http";
 import { spawn, execFile, type ChildProcess } from "node:child_process";
 import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
+import type { Readable, Writable } from "node:stream";
 
 const run = promisify(execFile);
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const CHROME = process.env.CHROME ??
   `${process.env.HOME}/Library/Caches/ms-playwright/chromium_headless_shell-1248/chrome-headless-shell-mac-arm64/chrome-headless-shell`;
 const PORT = Number(process.env.PORT ?? 4000);
 const PROFILES = join(import.meta.dirname, "profiles");
 rmSync(PROFILES, { recursive: true, force: true }); // sessions live in memory, so anything on disk at boot is garbage
-let nextDebugPort = 9300;
 
-// ---------- CDP client: commands matched by id, events matched by name ----------
-async function connectCDP(wsUrl: string) {
-  const ws = new WebSocket(wsUrl);
-  await new Promise((ok, fail) => { ws.addEventListener("open", ok); ws.addEventListener("error", fail); });
-
+// ---------- CDP client over a pipe: commands matched by id, events matched by name ----------
+// a pipe is a raw byte stream, so every JSON message ends with a \0 byte
+function connectCDP(toChrome: Writable, fromChrome: Readable) {
   let nextId = 1;
   const pending = new Map<number, { ok: (v: any) => void; fail: (e: Error) => void }>(); // commands waiting for a reply
-  const waiters: { event: string; ok: (v: any) => void }[] = [];                          // code waiting for an event
+  const waiters: { event: string; sessionId?: string; ok: (v: any) => void }[] = [];     // code waiting for an event
 
-  ws.addEventListener("message", (e) => {
-    const msg = JSON.parse(e.data);
+  const onMessage = (msg: any) => {
     if (msg.id) {                                   // reply to one of our commands
       const p = pending.get(msg.id);
       pending.delete(msg.id);
       if (msg.error) p?.fail(new Error(msg.error.message)); else p?.ok(msg.result);
     } else {                                        // event the browser yelled on its own
       for (let i = waiters.length - 1; i >= 0; i--) {
-        if (waiters[i].event === msg.method) { waiters[i].ok(msg.params); waiters.splice(i, 1); }
+        const w = waiters[i];
+        if (w.event === msg.method && w.sessionId === msg.sessionId) { w.ok(msg.params); waiters.splice(i, 1); }
       }
+    }
+  };
+
+  let buf = "";
+  fromChrome.on("data", (chunk) => {
+    buf += chunk;
+    let end;
+    while ((end = buf.indexOf("\0")) >= 0) {        // may get half a message, or three at once
+      onMessage(JSON.parse(buf.slice(0, end)));
+      buf = buf.slice(end + 1);
     }
   });
 
-  const send = (method: string, params: object = {}) =>
+  // sessionId = which target (tab) the message is for. none = the browser itself.
+  const send = (method: string, params: object = {}, sessionId?: string) =>
     new Promise<any>((ok, fail) => {
       const id = nextId++;
       pending.set(id, { ok, fail });
-      ws.send(JSON.stringify({ id, method, params }));
+      toChrome.write(JSON.stringify({ id, method, params, sessionId }) + "\0");
     });
 
-  const waitFor = (event: string, ms = 30_000) =>
+  const waitFor = (event: string, sessionId?: string, ms = 30_000) =>
     new Promise<any>((ok, fail) => {
-      const w = { event, ok };
+      const w = { event, sessionId, ok };
       waiters.push(w);
       setTimeout(() => {
         const i = waiters.indexOf(w);
@@ -58,26 +66,32 @@ async function connectCDP(wsUrl: string) {
 }
 
 // ---------- sessions: in memory, die with the server ----------
-type Session = { id: string; proc: ChildProcess; profile: string } & Awaited<ReturnType<typeof connectCDP>>;
+type Session = {
+  id: string; proc: ChildProcess; profile: string;
+  send: (method: string, params?: object) => Promise<any>;   // pre-stamped with the tab's sessionId
+  waitFor: (event: string) => Promise<any>;
+};
 const sessions = new Map<string, Session>();
 
 async function createSession(): Promise<Session> {
   const id = randomUUID();
-  const port = nextDebugPort++;
   const profile = join(PROFILES, id);
-  const proc = spawn(CHROME, ["--headless", `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, "about:blank"], { stdio: "ignore" });
+  // fd 3 = commands into chrome, fd 4 = replies out. if we die, the OS closes these and chrome exits.
+  const proc = spawn(CHROME, ["--headless", "--remote-debugging-pipe", `--user-data-dir=${profile}`, "about:blank"], {
+    stdio: ["ignore", "ignore", "ignore", "pipe", "pipe"],
+  });
 
   try {
-    // poll the "lobby" until the browser is up (max ~5s)
-    let tabs: any[] | undefined;
-    for (let i = 0; i < 50 && !tabs; i++) {
-      try { tabs = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json(); } catch { await sleep(100); }
-    }
-    if (!tabs) throw new Error("browser never opened its debug port");
+    const browser = connectCDP(proc.stdio[3] as Writable, proc.stdio[4] as Readable);
+    // the pipe talks to the browser itself. find its tab, attach, get a ticket (sessionId) for that tab.
+    const { targetInfos } = await browser.send("Target.getTargets");
+    const tab = targetInfos.find((t: any) => t.type === "page");
+    const { sessionId } = await browser.send("Target.attachToTarget", { targetId: tab.targetId, flatten: true });
+    const send = (method: string, params: object = {}) => browser.send(method, params, sessionId);
+    const waitFor = (event: string) => browser.waitFor(event, sessionId);
 
-    const cdp = await connectCDP(tabs.find((t) => t.type === "page").webSocketDebuggerUrl);
-    await cdp.send("Page.enable");
-    const s: Session = { id, proc, profile, ...cdp };
+    await send("Page.enable");
+    const s: Session = { id, proc, profile, send, waitFor };
     sessions.set(id, s);
     proc.on("exit", () => { sessions.delete(id); rmSync(profile, { recursive: true, force: true }); });
     return s;
@@ -154,4 +168,4 @@ const server = createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => console.log(`tinfoil v3 on http://localhost:${PORT}`));
+server.listen(PORT, () => console.log(`tinfoil v3.1 on http://localhost:${PORT}`));
