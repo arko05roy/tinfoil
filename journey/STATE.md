@@ -41,27 +41,31 @@ Then: special keys (Enter/Tab/arrows), then wait-after-click-navigation, then re
 
 ## Notebook page (verbatim, rewritten 2026-11-16 w/ companies)
 ```
-BROWSER API = headless chromium + CDP
- curl = init HTML only, JS renders (CSR)
- +render→text = Firecrawl/ScrapingBee
- (moat: crawl queue, md clean, proxies)
- CDP = devtools API: cmd{id}→reply,
- event{no id} pushed; 1 conn, sessId/tab
- = mini Puppeteer
- v1 websocket → server kill -9 = orphan
- browsers (SIGKILL uncatchable)
-+pipe = fate-share: parent dies → OS
- closes pipe → EOF → browser exits
- DB = note ≠ world → reconcile
-+actionability = Playwright autowait
- visible + elementFromPoint hit-test
- else 409, never click ghosts
- el.click() = isTrusted false → bot
- CDP Input @x,y = trusted
- viewport matters: 800x600 → mobile site
- = Steel/Browserbase/Browserless
-scale: chromium ~100s MB → cap sess/host
-users: Browser Use, Skyvern (agents)
+═══ BROWSER API FOR AGENTS ═══
+1. FETCH
+   curl → initial HTML only
+   sites build page w/ JS (CSR)
+   ∴ need real browser (headless chromium)
+   → Firecrawl, ScrapingBee
+     moat: crawl queue, md cleanup, proxies
+2. CONTROL  (CDP)
+   CDP = DevTools API of the browser
+   cmd {id} → reply {same id}
+   event {no id} → pushed to you
+   1 conn, many tabs → sessionId/tab
+   → Puppeteer
+3. LIFECYCLE  (fate-sharing)
+   prob: kill -9 server → orphan browsers (SIGKILL can't be caught)
+   fix:  CDP over pipe; parent dies → OS closes pipe → EOF → browser exits
+   DB = note ≠ world → reconcile
+4. CLICKING  (actionability)
+   visible? + elementFromPoint hit-test; fail → 409
+   el.click() → isTrusted=false → bot; CDP Input @x,y → trusted
+   viewport matters (800x600 → mobile)
+   → Playwright auto-wait
+─── SCALE ─── chromium ≈ 100s MB → cap sess/host
+─── COMPANIES ─── infra → Steel, Browserbase, Browserless; agents → Browser Use, Skyvern
+(blank: Enter/nav-wait, sessions, stealth)
 ```
 Reserved bottom third: Enter/nav-wait, sessions+pooling, stealth.
 
