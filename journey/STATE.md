@@ -39,24 +39,29 @@ Then: special keys (Enter/Tab/arrows), then wait-after-click-navigation, then re
 - Chromium path hardcoded to Playwright cache (override with CHROME env)
 - no session limit / idle timeout; no way for external Puppeteer/DevTools to attach (pipe mode)
 
-## Notebook page (verbatim, written 2026-11-16)
+## Notebook page (verbatim, rewritten 2026-11-16 w/ companies)
 ```
-BROWSER API (steel) = headless chromium + CDP
+BROWSER API = headless chromium + CDP
  curl = init HTML only, JS renders (CSR)
+ +render→text = Firecrawl/ScrapingBee
+ (moat: crawl queue, md clean, proxies)
  CDP = devtools API: cmd{id}→reply,
  event{no id} pushed; 1 conn, sessId/tab
+ = mini Puppeteer
  v1 websocket → server kill -9 = orphan
  browsers (SIGKILL uncatchable)
 +pipe = fate-share: parent dies → OS
  closes pipe → EOF → browser exits
  DB = note ≠ world → reconcile
-+actionability (=playwright autowait):
++actionability = Playwright autowait
  visible + elementFromPoint hit-test
  else 409, never click ghosts
  el.click() = isTrusted false → bot
  CDP Input @x,y = trusted
  viewport matters: 800x600 → mobile site
+ = Steel/Browserbase/Browserless
 scale: chromium ~100s MB → cap sess/host
+users: Browser Use, Skyvern (agents)
 ```
 Reserved bottom third: Enter/nav-wait, sessions+pooling, stealth.
 
