@@ -38,3 +38,28 @@ Then: special keys (Enter/Tab/arrows), then wait-after-click-navigation, then re
 - type() only does printable chars (no Enter/Tab/arrows)
 - Chromium path hardcoded to Playwright cache (override with CHROME env)
 - no session limit / idle timeout; no way for external Puppeteer/DevTools to attach (pipe mode)
+
+## Notebook page (verbatim, written 2026-11-16)
+```
+BROWSER API (steel) = headless chromium + CDP
+ curl = init HTML only, JS renders (CSR)
+ CDP = devtools API: cmd{id}→reply,
+ event{no id} pushed; 1 conn, sessId/tab
+ v1 websocket → server kill -9 = orphan
+ browsers (SIGKILL uncatchable)
++pipe = fate-share: parent dies → OS
+ closes pipe → EOF → browser exits
+ DB = note ≠ world → reconcile
++actionability (=playwright autowait):
+ visible + elementFromPoint hit-test
+ else 409, never click ghosts
+ el.click() = isTrusted false → bot
+ CDP Input @x,y = trusted
+ viewport matters: 800x600 → mobile site
+scale: chromium ~100s MB → cap sess/host
+```
+Reserved bottom third: Enter/nav-wait, sessions+pooling, stealth.
+
+## Interview weak spots
+- said "kill -9 fixes it" (it's the problem; pipe is the fix)
+- confused trusted input with humanized mouse paths (stealth, not built yet)
