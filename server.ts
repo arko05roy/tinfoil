@@ -106,6 +106,36 @@ async function html(s: Session): Promise<string> {
   return r.result.value;
 }
 
+// selector -> center of the element on screen (scrolls it into view first). null if not found.
+async function locate(s: Session, selector: string): Promise<{ x: number; y: number } | null> {
+  const r = await s.send("Runtime.evaluate", {
+    returnByValue: true,
+    expression: `(() => {
+      const el = document.querySelector(${JSON.stringify(selector)});
+      if (!el) return null;
+      el.scrollIntoView({ block: "center", inline: "center" });
+      const b = el.getBoundingClientRect();
+      return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+    })()`,
+  });
+  return r.result.value;
+}
+
+// a real click = move, press, release. sent as hardware-level input, so the browser marks it trusted.
+async function click(s: Session, x: number, y: number) {
+  await s.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y });
+  await s.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
+  await s.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
+}
+
+// a real keypress per character, into whatever element has focus
+async function type(s: Session, text: string) {
+  for (const ch of text) {
+    await s.send("Input.dispatchKeyEvent", { type: "keyDown", key: ch, text: ch });
+    await s.send("Input.dispatchKeyEvent", { type: "keyUp", key: ch });
+  }
+}
+
 // ---------- cleanup: browsers die with the server ----------
 function killAll() {
   for (const s of sessions.values()) { s.proc.kill(); rmSync(s.profile, { recursive: true, force: true }); }
@@ -155,6 +185,24 @@ const server = createServer(async (req, res) => {
     }
 
     if (action === "content" && req.method === "GET") return text(200, await html(s));
+
+    if ((action === "click" || action === "type") && req.method === "POST") {
+      const b = JSON.parse((await body(req)) || "{}");
+      let at = typeof b.x === "number" && typeof b.y === "number" ? { x: b.x, y: b.y } : null;
+      if (b.selector) {
+        at = await locate(s, b.selector);
+        if (!at) return json(404, { error: `nothing matches ${b.selector}` });
+      }
+      if (action === "click") {
+        if (!at) return json(400, { error: "send {selector} or {x, y}" });
+        await click(s, at.x, at.y);
+        return json(200, { clicked: at });
+      }
+      if (typeof b.text !== "string") return json(400, { error: "send {text, selector?}" });
+      if (at) await click(s, at.x, at.y);           // focus the box first, like a human would
+      await type(s, b.text);
+      return json(200, { typed: b.text.length });
+    }
 
     if (action === "eval" && req.method === "POST") {
       const r = await s.send("Runtime.evaluate", { expression: await body(req), returnByValue: true, awaitPromise: true });
