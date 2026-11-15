@@ -77,7 +77,7 @@ async function createSession(): Promise<Session> {
   const id = randomUUID();
   const profile = join(PROFILES, id);
   // fd 3 = commands into chrome, fd 4 = replies out. if we die, the OS closes these and chrome exits.
-  const proc = spawn(CHROME, ["--headless", "--remote-debugging-pipe", `--user-data-dir=${profile}`, "about:blank"], {
+  const proc = spawn(CHROME, ["--headless", "--remote-debugging-pipe", "--window-size=1280,800", `--user-data-dir=${profile}`, "about:blank"], {
     stdio: ["ignore", "ignore", "ignore", "pipe", "pipe"],
   });
 
@@ -106,16 +106,25 @@ async function html(s: Session): Promise<string> {
   return r.result.value;
 }
 
-// selector -> center of the element on screen (scrolls it into view first). null if not found.
-async function locate(s: Session, selector: string): Promise<{ x: number; y: number } | null> {
+// selector -> center of the first match a human could actually click, or a reason why not.
+// checks like a human would: does it exist, does it have a size, is something covering it?
+async function locate(s: Session, selector: string): Promise<{ x: number; y: number } | { error: string }> {
   const r = await s.send("Runtime.evaluate", {
     returnByValue: true,
     expression: `(() => {
-      const el = document.querySelector(${JSON.stringify(selector)});
-      if (!el) return null;
+      const all = [...document.querySelectorAll(${JSON.stringify(selector)})];
+      if (!all.length) return { error: "nothing matches" };
+      const el = all.find((e) => { const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0; });
+      if (!el) return { error: all.length + " match(es), none visible (0x0 or hidden)" };
       el.scrollIntoView({ block: "center", inline: "center" });
       const b = el.getBoundingClientRect();
-      return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+      const x = b.x + b.width / 2, y = b.y + b.height / 2;
+      const hit = document.elementFromPoint(x, y);          // what a real click at (x,y) would land on
+      if (!hit || !(el === hit || el.contains(hit))) {
+        const who = hit ? hit.tagName.toLowerCase() + (hit.id ? "#" + hit.id : "") + (hit.classList[0] ? "." + hit.classList[0] : "") : "nothing";
+        return { error: "covered by " + who };
+      }
+      return { x, y };
     })()`,
   });
   return r.result.value;
@@ -190,8 +199,9 @@ const server = createServer(async (req, res) => {
       const b = JSON.parse((await body(req)) || "{}");
       let at = typeof b.x === "number" && typeof b.y === "number" ? { x: b.x, y: b.y } : null;
       if (b.selector) {
-        at = await locate(s, b.selector);
-        if (!at) return json(404, { error: `nothing matches ${b.selector}` });
+        const found = await locate(s, b.selector);
+        if ("error" in found) return json(409, { error: `${b.selector}: ${found.error}` });
+        at = found;
       }
       if (action === "click") {
         if (!at) return json(400, { error: "send {selector} or {x, y}" });
