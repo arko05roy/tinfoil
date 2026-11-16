@@ -146,8 +146,8 @@ async function type(s: Session, text: string) {
 }
 
 // special keys have no text, only identity: key name + physical code + legacy keycode
-const KEYS: Record<string, { code: string; keyCode: number; text?: string }> = {
-  Enter: { code: "Enter", keyCode: 13, text: "\r" },
+const KEYS: Record<string, { code: string; keyCode: number; text?: string; nav?: true }> = {
+  Enter: { code: "Enter", keyCode: 13, text: "\r", nav: true },   // nav: can submit a form → worth waiting for
   Tab: { code: "Tab", keyCode: 9 },
   Backspace: { code: "Backspace", keyCode: 8 },
   Escape: { code: "Escape", keyCode: 27 },
@@ -246,6 +246,7 @@ const server = createServer(async (req, res) => {
     if (action === "press" && req.method === "POST") {
       const b = JSON.parse((await body(req)) || "{}");
       if (!KEYS[b.key]) return json(400, { error: `key must be one of: ${Object.keys(KEYS).join(", ")}` });
+      if (!KEYS[b.key].nav) { await press(s, b.key); return json(200, { pressed: b.key, navigated: false }); } // can't navigate → no 500ms tax
       return json(200, await settle(s, async () => { await press(s, b.key); return { pressed: b.key }; }));
     }
 

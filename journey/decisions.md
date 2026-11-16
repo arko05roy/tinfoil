@@ -9,3 +9,7 @@
 - CDP over pipe, not port: browsers die with the server even on kill -9. Cost: no external Puppeteer/DevTools attach.
 - Click/type target: both selector and x,y (HTML-reading and screenshot agents).
 - Check visibility before clicking; fail loudly with a reason. Default window 1280x800.
+
+## Special keys = separate /press action (not {Enter} inside type text)
+## Nav wait: listen 500ms, wait for load only if nav started. Only nav-capable actions (click, Enter) pay it — user: "for certain ones we wait, others instant". Agent override flag skipped.
+## Single file for now: split by concern when it hurts (~500-800 lines / pooling lands).

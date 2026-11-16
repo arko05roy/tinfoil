@@ -9,11 +9,11 @@ Agent hits our server over HTTP, says "go to this URL", gets the page back as te
 ## Last step
 v4.2: POST /press {key} w/ KEYS table (key+code+keyCode, Enter text "\r") → Wikipedia search submits.
 settle(): listen frameStartedLoading 500ms BEFORE acting; if nav → wait loadEventFired. click+press return {navigated}.
+v4.3: KEYS.nav flag; only Enter (+clicks) settle, other keys instant (ArrowDown 0.51s→0.008s).
 Tested: Enter→Turing page (0.73s, navigated:true), ArrowDown (0.51s, false), click link→Logic page.
 
 ## Next step
-Ask user: what breaks the 500ms-window settle? (SPA pushState = no load; late JS nav >500ms; 500ms tax on every non-nav action)
-Then notebook ⑤-ish line for keys+settle once settled.
+Notebook entry for keys+settle (user says it out loud first), then sessions/pooling or stealth.
 
 ## Concepts discovered
 - client-side rendering vs SSR (curl gets the starting HTML only)
@@ -34,7 +34,7 @@ Then notebook ⑤-ish line for keys+settle once settled.
 - spawning a process (server launches another program, reads its stdout)
 
 ## Debt
-- settle(): fixed 500ms window; SPA navs invisible; dangling load waiters time out after 30s
+- settle(): fixed 500ms window; SPA pushState navs invisible (navigated:false lie); JS nav >500ms missed → reads old page; dangling load waiters time out after 30s
 - KEYS table small (8 keys), no modifiers (Ctrl/Shift)
 - Chromium path hardcoded to Playwright cache (override with CHROME env)
 - no session limit / idle timeout; no way for external Puppeteer/DevTools to attach (pipe mode)

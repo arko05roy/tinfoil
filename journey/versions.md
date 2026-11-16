@@ -12,3 +12,6 @@
 ## v4.2 — keys + settle
 Broke: "\n" in type() did nothing (key:"\n" isn't a key name, no keyCode 13; input drops newline).
 Changed: /press with KEYS table; settle() waits for load only if a nav starts within 500ms.
+
+## v4.3 — no 500ms tax
+Broke: every key paid 500ms nav window. Changed: KEYS.nav, only Enter/click settle.
