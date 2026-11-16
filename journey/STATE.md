@@ -7,14 +7,13 @@ Lang: TypeScript, Node 26 (runs .ts natively, no build). Run: `node server.ts` (
 Agent hits our server over HTTP, says "go to this URL", gets the page back as text.
 
 ## Last step
-v4.1: locate() = first visible match + elementFromPoint hit-test, returns 409 with a reason instead of
-clicking ghosts. Browser window 1280x800 (800x600 default gave Wikipedia's mobile layout, search 0x0).
-Wikipedia: typing "Alan Turing" fills the box + triggers autocomplete. Can't submit: no Enter key.
-(v4 = trusted click/type via CDP Input. v3.1 = pipe mode + targets/sessionId. See versions.md.)
+v4.2: POST /press {key} w/ KEYS table (key+code+keyCode, Enter text "\r") → Wikipedia search submits.
+settle(): listen frameStartedLoading 500ms BEFORE acting; if nav → wait loadEventFired. click+press return {navigated}.
+Tested: Enter→Turing page (0.73s, navigated:true), ArrowDown (0.51s, false), click link→Logic page.
 
-## Next step (paused here for lunch)
-Open question to user: why didn't "\n" act like Enter? Is Enter a character or something else?
-Then: special keys (Enter/Tab/arrows), then wait-after-click-navigation, then read Turing's page.
+## Next step
+Ask user: what breaks the 500ms-window settle? (SPA pushState = no load; late JS nav >500ms; 500ms tax on every non-nav action)
+Then notebook ⑤-ish line for keys+settle once settled.
 
 ## Concepts discovered
 - client-side rendering vs SSR (curl gets the starting HTML only)
@@ -30,12 +29,13 @@ Then: special keys (Enter/Tab/arrows), then wait-after-click-navigation, then re
 - CDP targets + multiplexing (one connection, sessionId per tab)
 - headless != neutral: viewport size changes the site you get (mobile layout)
 - actionability: visible + not covered (hit test) before clicking; fail loudly
+- key identity: key/code/keyCode vs text; special keys have no text
 - trusted vs synthetic events: only browser-level input gets isTrusted=true; real input is coordinates + hit testing
 - spawning a process (server launches another program, reads its stdout)
 
 ## Debt
-- click that triggers navigation returns before the new page loads
-- type() only does printable chars (no Enter/Tab/arrows)
+- settle(): fixed 500ms window; SPA navs invisible; dangling load waiters time out after 30s
+- KEYS table small (8 keys), no modifiers (Ctrl/Shift)
 - Chromium path hardcoded to Playwright cache (override with CHROME env)
 - no session limit / idle timeout; no way for external Puppeteer/DevTools to attach (pipe mode)
 

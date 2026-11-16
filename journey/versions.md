@@ -8,3 +8,7 @@
 - v3.1 CDP over pipe; attach to tab target, route by sessionId; no orphans on kill -9
 - v4   trusted click/type via Input.dispatchMouseEvent / dispatchKeyEvent
 - v4.1 visibility + hit-test before click; 1280x800 window
+
+## v4.2 — keys + settle
+Broke: "\n" in type() did nothing (key:"\n" isn't a key name, no keyCode 13; input drops newline).
+Changed: /press with KEYS table; settle() waits for load only if a nav starts within 500ms.

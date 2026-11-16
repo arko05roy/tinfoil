@@ -69,7 +69,7 @@ function connectCDP(toChrome: Writable, fromChrome: Readable) {
 type Session = {
   id: string; proc: ChildProcess; profile: string;
   send: (method: string, params?: object) => Promise<any>;   // pre-stamped with the tab's sessionId
-  waitFor: (event: string) => Promise<any>;
+  waitFor: (event: string, ms?: number) => Promise<any>;
 };
 const sessions = new Map<string, Session>();
 
@@ -88,7 +88,7 @@ async function createSession(): Promise<Session> {
     const tab = targetInfos.find((t: any) => t.type === "page");
     const { sessionId } = await browser.send("Target.attachToTarget", { targetId: tab.targetId, flatten: true });
     const send = (method: string, params: object = {}) => browser.send(method, params, sessionId);
-    const waitFor = (event: string) => browser.waitFor(event, sessionId);
+    const waitFor = (event: string, ms?: number) => browser.waitFor(event, sessionId, ms);
 
     await send("Page.enable");
     const s: Session = { id, proc, profile, send, waitFor };
@@ -143,6 +143,35 @@ async function type(s: Session, text: string) {
     await s.send("Input.dispatchKeyEvent", { type: "keyDown", key: ch, text: ch });
     await s.send("Input.dispatchKeyEvent", { type: "keyUp", key: ch });
   }
+}
+
+// special keys have no text, only identity: key name + physical code + legacy keycode
+const KEYS: Record<string, { code: string; keyCode: number; text?: string }> = {
+  Enter: { code: "Enter", keyCode: 13, text: "\r" },
+  Tab: { code: "Tab", keyCode: 9 },
+  Backspace: { code: "Backspace", keyCode: 8 },
+  Escape: { code: "Escape", keyCode: 27 },
+  ArrowLeft: { code: "ArrowLeft", keyCode: 37 },
+  ArrowUp: { code: "ArrowUp", keyCode: 38 },
+  ArrowRight: { code: "ArrowRight", keyCode: 39 },
+  ArrowDown: { code: "ArrowDown", keyCode: 40 },
+};
+
+async function press(s: Session, key: string) {
+  const k = KEYS[key];
+  const base = { key, code: k.code, windowsVirtualKeyCode: k.keyCode };
+  await s.send("Input.dispatchKeyEvent", { type: "keyDown", ...base, ...(k.text && { text: k.text }) });
+  await s.send("Input.dispatchKeyEvent", { type: "keyUp", ...base });
+}
+
+// run an action; if it kicks off a page load within 500ms, wait for that load to finish
+async function settle<T>(s: Session, act: () => Promise<T>): Promise<T & { navigated: boolean }> {
+  const started = s.waitFor("Page.frameStartedLoading", 500).then(() => true, () => false); // listen BEFORE acting
+  const loaded = s.waitFor("Page.loadEventFired").catch(() => null);                          // catch: no nav = no load, don't crash
+  const r = await act();
+  const navigated = await started;
+  if (navigated) await loaded;
+  return { ...r, navigated };
 }
 
 // ---------- cleanup: browsers die with the server ----------
@@ -205,13 +234,19 @@ const server = createServer(async (req, res) => {
       }
       if (action === "click") {
         if (!at) return json(400, { error: "send {selector} or {x, y}" });
-        await click(s, at.x, at.y);
-        return json(200, { clicked: at });
+        const at2 = at;
+        return json(200, await settle(s, async () => { await click(s, at2.x, at2.y); return { clicked: at2 }; }));
       }
       if (typeof b.text !== "string") return json(400, { error: "send {text, selector?}" });
       if (at) await click(s, at.x, at.y);           // focus the box first, like a human would
       await type(s, b.text);
       return json(200, { typed: b.text.length });
+    }
+
+    if (action === "press" && req.method === "POST") {
+      const b = JSON.parse((await body(req)) || "{}");
+      if (!KEYS[b.key]) return json(400, { error: `key must be one of: ${Object.keys(KEYS).join(", ")}` });
+      return json(200, await settle(s, async () => { await press(s, b.key); return { pressed: b.key }; }));
     }
 
     if (action === "eval" && req.method === "POST") {
