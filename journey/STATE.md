@@ -13,7 +13,7 @@ v4.3: KEYS.nav flag; only Enter (+clicks) settle, other keys instant (ArrowDown 
 Tested: Enter→Turing page (0.73s, navigated:true), ArrowDown (0.51s, false), click link→Logic page.
 
 ## Next step
-Pick next: sessions+pooling (idle timeout, caps) or stealth. Optional: fix SPA/late-nav debt.
+Paused for dinner. Open question: pick next — (a) sessions+pooling [my vote], (b) stealth, (c) SPA/late-nav debt. Do recall quiz on ④+ first (why "\n" failed, why listen before acting).
 
 ## Concepts discovered
 - client-side rendering vs SSR (curl gets the starting HTML only)
