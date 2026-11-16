@@ -13,7 +13,7 @@ v4.3: KEYS.nav flag; only Enter (+clicks) settle, other keys instant (ArrowDown 
 Tested: Enter→Turing page (0.73s, navigated:true), ArrowDown (0.51s, false), click link→Logic page.
 
 ## Next step
-Notebook entry for keys+settle (user says it out loud first), then sessions/pooling or stealth.
+Pick next: sessions+pooling (idle timeout, caps) or stealth. Optional: fix SPA/late-nav debt.
 
 ## Concepts discovered
 - client-side rendering vs SSR (curl gets the starting HTML only)
@@ -53,8 +53,15 @@ Notebook entry for keys+settle (user says it out loud first), then sessions/pool
    [YOU HAVE STEEL v0 NOW (Playwright-grade clicks)]
    scale: chrome ~100s MB → cap sess/host
 ⑤ STEEL v0 + sessions + stealth → BROWSERBASE (blank, coming)
+④+ STEEL v0 + keys + nav-wait
+   key = key"Enter"+code+keyCode13(+text"\r"); "\n" no such key→ignored
+   printable: text does the work; special = identity only → table
+   settle: listen BEFORE act; frameStartedLoading ≤500ms? → wait load
+   only click/Enter wait; arrows instant (0.5s→8ms ×200 presses)
+   breaks: SPA pushState=no load→lies; JS nav >500ms→stale page
+   [YOU HAVE PLAYWRIGHT-STYLE AUTO-WAIT NOW]
 ```
-Reserved bottom third: Enter/nav-wait, sessions+pooling, stealth.
+Reserved remaining: sessions+pooling, stealth (~1/4 page left, compress hard).
 
 ## Interview weak spots
 - said "kill -9 fixes it" (it's the problem; pipe is the fix)
