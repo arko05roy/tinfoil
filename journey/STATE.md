@@ -1,7 +1,7 @@
 # tinfoil — STATE
 
 Building our own Steel (browser API for AI agents) from zero. Reference repo (READ-ONLY): ~/Desktop/browser
-Lang: TypeScript, Node 26 (runs .ts natively, no build). Run: `node server.ts` (port 4000)
+Lang: TypeScript, Node 26 (runs .ts natively, no build). Run: `npm start` (port 4000). Code in src/ (main, config, cdp, sessions, input, http)
 
 ## Milestone (session 1)
 Agent hits our server over HTTP, says "go to this URL", gets the page back as text.
@@ -11,6 +11,9 @@ v4.2: POST /press {key} w/ KEYS table (key+code+keyCode, Enter text "\r") → Wi
 settle(): listen frameStartedLoading 500ms BEFORE acting; if nav → wait loadEventFired. click+press return {navigated}.
 v4.3: KEYS.nav flag; only Enter (+clicks) settle, other keys instant (ArrowDown 0.51s→0.008s).
 Tested: Enter→Turing page (0.73s, navigated:true), ArrowDown (0.51s, false), click link→Logic page.
+
+## Done since
+v5: cap 20/box → 429, idle 5min + max-life 30min janitor. Restructured into src/ modules + package.json/tsconfig/README.
 
 ## Next step
 Paused for dinner. Open question: pick next — (a) sessions+pooling [my vote], (b) stealth, (c) SPA/late-nav debt. Do recall quiz on ④+ first (why "\n" failed, why listen before acting).
