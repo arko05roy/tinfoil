@@ -12,3 +12,4 @@ export const PROFILES = join(import.meta.dirname, "..", "profiles");
 export const MAX_SESSIONS = env("MAX_SESSIONS", 20);
 export const IDLE_MS = env("IDLE_MS", 5 * 60_000);          // quiet this long → dead
 export const MAX_LIFE_MS = env("MAX_LIFE_MS", 30 * 60_000); // hard ceiling, even if busy
+export const POOL_SIZE = env("POOL_SIZE", 5);           // warm chromes waiting, count toward MAX_SESSIONS

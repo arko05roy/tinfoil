@@ -5,7 +5,7 @@ import { rmSync } from "node:fs";
 import { join } from "node:path";
 import type { Readable, Writable } from "node:stream";
 import { connectCDP } from "./cdp.ts";
-import { CHROME, IDLE_MS, MAX_LIFE_MS, MAX_SESSIONS, PROFILES } from "./config.ts";
+import { CHROME, IDLE_MS, MAX_LIFE_MS, MAX_SESSIONS, POOL_SIZE, PROFILES } from "./config.ts";
 
 export type Session = {
   id: string; proc: ChildProcess; profile: string;
@@ -14,16 +14,36 @@ export type Session = {
   waitFor: (event: string, ms?: number) => Promise<any>;
 };
 
-export const sessions = new Map<string, Session>();
+export const sessions = new Map<string, Session>(); // claimed by an agent
+const pool: Session[] = [];                          // booted, unclaimed, never touched by anyone
 let starting = 0; // chromes mid-boot count against the cap too, or 50 parallel POSTs all sneak past
+const total = () => sessions.size + pool.length + starting; // every chrome on this box
 
 rmSync(PROFILES, { recursive: true, force: true }); // sessions live in memory, so anything on disk at boot is garbage
 
 export class FullError extends Error {}
 
-// admission control: refuse before spawning anything
+// warm chrome if we have one (~0ms), else cold boot. either way it's fresh: chromes are never reused.
 export async function createSession(): Promise<Session> {
-  if (sessions.size + starting >= MAX_SESSIONS) throw new FullError(`full: ${MAX_SESSIONS} sessions max, delete one or retry later`);
+  let s = pool.shift();
+  if (!s) {
+    if (total() >= MAX_SESSIONS) throw new FullError(`full: ${MAX_SESSIONS} sessions max, delete one or retry later`);
+    s = await boot();
+  }
+  s.createdAt = s.lastUsed = Date.now(); // clocks start at claim, not at boot
+  sessions.set(s.id, s);
+  refill();
+  return s;
+}
+
+// top the pool back up to POOL_SIZE, without ever pushing the box past MAX_SESSIONS
+export function refill() {
+  while (pool.length + starting < POOL_SIZE && total() < MAX_SESSIONS) {
+    boot().then((s) => pool.push(s), (e) => console.error(`warm boot failed: ${e.message}`));
+  }
+}
+
+async function boot(): Promise<Session> {
   starting++;
   try { return await spawnSession(); } finally { starting--; }
 }
@@ -47,8 +67,12 @@ async function spawnSession(): Promise<Session> {
 
     await send("Page.enable");
     const s: Session = { id, proc, profile, send, waitFor, createdAt: Date.now(), lastUsed: Date.now() };
-    sessions.set(id, s);
-    proc.on("exit", () => { sessions.delete(id); rmSync(profile, { recursive: true, force: true }); });
+    proc.on("exit", () => {
+      sessions.delete(id);
+      const i = pool.indexOf(s); if (i >= 0) pool.splice(i, 1); // a warm one can crash too
+      rmSync(profile, { recursive: true, force: true });
+      refill();                                                  // freed a slot → maybe warm another
+    });
     return s;
   } catch (err) {
     proc.kill();
@@ -69,5 +93,5 @@ export function startJanitor() {
 
 // browsers die with the server
 export function killAll() {
-  for (const s of sessions.values()) { s.proc.kill(); rmSync(s.profile, { recursive: true, force: true }); }
+  for (const s of [...sessions.values(), ...pool]) { s.proc.kill(); rmSync(s.profile, { recursive: true, force: true }); }
 }

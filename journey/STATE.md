@@ -16,7 +16,7 @@ Tested: Enter→Turing page (0.73s, navigated:true), ArrowDown (0.51s, false), c
 v5: cap 20/box → 429, idle 5min + max-life 30min janitor. Restructured into src/ modules + package.json/tsconfig/README.
 
 ## Next step
-Pooling (warm chromes; 10 parallel creates ~400ms each). Catch to discover: reused chrome leaks cookies/state between customers. Then notebook ⑤ (cap+janitor+pool), user says it out loud first. Recall quiz on ④+ still owed (user skipped).
+v5.1 pool DONE. Next: notebook ⑤ (cap+janitor+pool+kill-not-reuse), user says it out loud first; recall quiz on ④+ still owed.
 
 ## Concepts discovered
 - client-side rendering vs SSR (curl gets the starting HTML only)

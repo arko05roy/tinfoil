@@ -19,3 +19,9 @@
 - MAX_SESSIONS=20/box, 429 + retry-after when full (not a queue). `starting` counter so parallel POSTs can't sneak past.
 - Idle timeout 5min (since last use, not since created → busy agents survive) + max life 30min (stops zombie loops pinging forever).
 - Measured: ~150MB/blank session, cold start 110–460ms.
+
+## v5.1: warm pool (2026-11-17)
+- POOL_SIZE=5 warm chromes, count toward MAX_SESSIONS (they eat RAM whether claimed or not).
+- Pool empty → cold boot (not fail, not wait).
+- DELETE/reap → KILL, never reuse. Reused chrome leaks cookies/localStorage/IndexedDB/cache/service workers → Agent B in Agent A's bank. Fresh = isolation for free.
+- Clocks (idle/max-life) start at claim, not boot. Refill after claim + after any exit.
