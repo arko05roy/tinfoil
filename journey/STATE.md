@@ -6,19 +6,21 @@ Lang: TypeScript, Node 26 (runs .ts natively, no build). Run: `npm start` (port 
 ## Milestone (session 1)
 Agent hits our server over HTTP, says "go to this URL", gets the page back as text.
 
-## Last step
-v4.2: POST /press {key} w/ KEYS table (key+code+keyCode, Enter text "\r") → Wikipedia search submits.
-settle(): listen frameStartedLoading 500ms BEFORE acting; if nav → wait loadEventFired. click+press return {navigated}.
-v4.3: KEYS.nav flag; only Enter (+clicks) settle, other keys instant (ArrowDown 0.51s→0.008s).
-Tested: Enter→Turing page (0.73s, navigated:true), ArrowDown (0.51s, false), click link→Logic page.
-
-## Done since
-v5: cap 20/box → 429, idle 5min + max-life 30min janitor. Restructured into src/ modules + package.json/tsconfig/README.
+## Last step (2026-11-17)
+v5: cap 20/box (429+retry-after), idle 5min + max-life 30min janitor. Restructured into src/ + package.json/tsconfig/README.
+v5.1: warm pool 5 (counts toward cap), empty → cold boot, used chrome KILLED never reused. claim 1–9ms vs ~450ms cold.
+Scale drill done (discussion, in design.md): ~100 boxes/10k, CPU bites first, redis control plane, heartbeat TTL, 410 Gone.
 
 ## Next step
 v5.1 pool DONE. Next: notebook ⑤ (cap+janitor+pool+kill-not-reuse), user says it out loud first; recall quiz on ④+ still owed.
 
 ## Concepts discovered
+- rate limit = flow, cap = stock (box dies from stock)
+- idle timeout (since last use) + max lifetime (zombie loops)
+- admission control (refuse before spawning; count booting ones too)
+- warm pool: pool size ≈ burst size; never reuse (state leaks between customers)
+- control plane vs data plane; stateless routing (box in id) vs lookup table
+- heartbeat w/ TTL = failure detection without a watcher; 410 Gone vs 502
 - client-side rendering vs SSR (curl gets the starting HTML only)
 - browser = JS engine + DOM (live tree after scripts run)
 - headless vs headless shell (no window vs engine-only build)
