@@ -1,0 +1,2 @@
+- scale drill: flipped units (said 160 boxes, meant 160 sess/box). Say units out loud.
+- recall quiz on ④+ skipped (why "\n" failed, why listen before acting).
