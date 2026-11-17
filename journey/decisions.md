@@ -13,3 +13,9 @@
 ## Special keys = separate /press action (not {Enter} inside type text)
 ## Nav wait: listen 500ms, wait for load only if nav started. Only nav-capable actions (click, Enter) pay it — user: "for certain ones we wait, others instant". Agent override flag skipped.
 ## Single file for now: split by concern when it hurts (~500-800 lines / pooling lands).
+
+## v5: cap + janitor (2026-11-17)
+- Rate limit alone = controls flow, box dies from stock (1 leak/min never trips it). Chose: cap the tub.
+- MAX_SESSIONS=20/box, 429 + retry-after when full (not a queue). `starting` counter so parallel POSTs can't sneak past.
+- Idle timeout 5min (since last use, not since created → busy agents survive) + max life 30min (stops zombie loops pinging forever).
+- Measured: ~150MB/blank session, cold start 110–460ms.

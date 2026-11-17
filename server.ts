@@ -1,4 +1,4 @@
-// tinfoil v3.1: a live browser per session, driven over CDP on a pipe (dies with us)
+// tinfoil v5: a live browser per session, driven over CDP on a pipe (dies with us)
 import { createServer, type IncomingMessage } from "node:http";
 import { spawn, execFile, type ChildProcess } from "node:child_process";
 import { promisify } from "node:util";
@@ -11,6 +11,10 @@ const run = promisify(execFile);
 const CHROME = process.env.CHROME ??
   `${process.env.HOME}/Library/Caches/ms-playwright/chromium_headless_shell-1248/chrome-headless-shell-mac-arm64/chrome-headless-shell`;
 const PORT = Number(process.env.PORT ?? 4000);
+// the tub, not the tap: cap how many chromes exist + drain abandoned ones
+const MAX_SESSIONS = Number(process.env.MAX_SESSIONS ?? 20);
+const IDLE_MS = Number(process.env.IDLE_MS ?? 5 * 60_000);      // quiet this long → dead
+const MAX_LIFE_MS = Number(process.env.MAX_LIFE_MS ?? 30 * 60_000); // hard ceiling, even if busy
 const PROFILES = join(import.meta.dirname, "profiles");
 rmSync(PROFILES, { recursive: true, force: true }); // sessions live in memory, so anything on disk at boot is garbage
 
@@ -68,10 +72,22 @@ function connectCDP(toChrome: Writable, fromChrome: Readable) {
 // ---------- sessions: in memory, die with the server ----------
 type Session = {
   id: string; proc: ChildProcess; profile: string;
+  createdAt: number; lastUsed: number;
   send: (method: string, params?: object) => Promise<any>;   // pre-stamped with the tab's sessionId
   waitFor: (event: string, ms?: number) => Promise<any>;
 };
 const sessions = new Map<string, Session>();
+
+let starting = 0; // chromes mid-boot count against the cap too, or 50 parallel POSTs all sneak past
+
+// janitor: every 5s, kill anything idle too long or alive too long. kill → exit handler cleans up.
+setInterval(() => {
+  const now = Date.now();
+  for (const s of sessions.values()) {
+    const why = now - s.lastUsed > IDLE_MS ? "idle" : now - s.createdAt > MAX_LIFE_MS ? "max-life" : null;
+    if (why) { console.log(`session ${s.id.slice(0, 8)} reaped (${why})`); s.proc.kill(); }
+  }
+}, 5_000).unref();
 
 async function createSession(): Promise<Session> {
   const id = randomUUID();
@@ -91,7 +107,7 @@ async function createSession(): Promise<Session> {
     const waitFor = (event: string, ms?: number) => browser.waitFor(event, sessionId, ms);
 
     await send("Page.enable");
-    const s: Session = { id, proc, profile, send, waitFor };
+    const s: Session = { id, proc, profile, send, waitFor, createdAt: Date.now(), lastUsed: Date.now() };
     sessions.set(id, s);
     proc.on("exit", () => { sessions.delete(id); rmSync(profile, { recursive: true, force: true }); });
     return s;
@@ -202,8 +218,13 @@ const server = createServer(async (req, res) => {
     if (root !== "sessions") return text(404, "try POST /sessions\n");
 
     if (!id && req.method === "POST") {
+      if (sessions.size + starting >= MAX_SESSIONS) {
+        res.setHeader("retry-after", "30");
+        return json(429, { error: `full: ${MAX_SESSIONS} sessions max, delete one or retry later` });
+      }
       const t0 = Date.now();
-      const s = await createSession();
+      starting++;
+      const s = await createSession().finally(() => starting--);
       console.log(`session ${s.id.slice(0, 8)} up in ${Date.now() - t0}ms (pid ${s.proc.pid})`);
       return json(201, { id: s.id });
     }
@@ -211,6 +232,7 @@ const server = createServer(async (req, res) => {
 
     const s = sessions.get(id);
     if (!s) return text(404, "no such session\n");
+    s.lastUsed = Date.now(); // any touch = still alive
 
     if (!action && req.method === "DELETE") { s.proc.kill(); return json(200, { deleted: id }); }
 
@@ -262,4 +284,4 @@ const server = createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => console.log(`tinfoil v3.1 on http://localhost:${PORT}`));
+server.listen(PORT, () => console.log(`tinfoil v5 on http://localhost:${PORT}`));
