@@ -1,5 +1,5 @@
 // acting like a human: find clickable things, real mouse + keyboard input, wait for navigations.
-import type { Session } from "./sessions.ts";
+import type { Session } from "../sessions/manager.ts";
 
 export async function html(s: Session): Promise<string> {
   const r = await s.send("Runtime.evaluate", { expression: "document.documentElement.outerHTML", returnByValue: true });

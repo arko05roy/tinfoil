@@ -6,7 +6,7 @@ const env = (k: string, d: number) => Number(process.env[k] ?? d);
 export const CHROME = process.env.CHROME ??
   `${process.env.HOME}/Library/Caches/ms-playwright/chromium_headless_shell-1248/chrome-headless-shell-mac-arm64/chrome-headless-shell`;
 export const PORT = env("PORT", 4000);
-export const PROFILES = join(import.meta.dirname, "..", "profiles");
+export const PROFILES = join(import.meta.dirname, "..", ".profiles");
 
 // the tub, not the tap: cap how many chromes exist + drain abandoned ones
 export const MAX_SESSIONS = env("MAX_SESSIONS", 20);

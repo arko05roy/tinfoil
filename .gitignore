@@ -1,3 +1,5 @@
 node_modules/
+.profiles/
 profiles/
+.env
 .DS_Store

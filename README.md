@@ -1,55 +1,53 @@
 # tinfoil
 
-A browser API for AI agents, built from zero: an agent makes HTTP calls, and tinfoil drives a real headless Chromium for it over the Chrome DevTools Protocol (CDP).
+**A browser API for AI agents.** Your agent makes plain HTTP calls; tinfoil runs real, isolated headless Chromium for it: trusted clicks, keyboard, auto-waiting on navigation, capped and self-cleaning sessions, and a warm pool so sessions start in milliseconds.
 
-## Run
+```bash
+curl -XPOST localhost:4000/sessions                          # {"id":"…"}  (~5ms from warm pool)
+curl -XPOST "localhost:4000/sessions/$ID/goto?url=https://example.com"
+curl -XPOST localhost:4000/sessions/$ID/click -d '{"selector":"a"}'   # {"navigated":true,…}
+curl -XDELETE localhost:4000/sessions/$ID
+```
+
+## Quickstart
 
 ```bash
 npm install
-npm start            # http://localhost:4000
-npm run dev          # restart on file change
-npm run typecheck
+cp .env.example .env     # optional, every value has a default
+npm start                # http://localhost:4000
+npm run check            # typecheck + end-to-end tests (real chromes)
 ```
 
-Needs Node 24+ (runs TypeScript directly, no build step) and a Chromium binary. Point `CHROME` at one if the default Playwright cache path doesn't exist.
+Needs Node 24+ (runs TypeScript directly, no build step) and a Chromium binary. Set `CHROME` if the default Playwright cache path doesn't exist.
 
-## API
+**API reference → [docs/api.md](docs/api.md)** · Config → [.env.example](.env.example) · Changes → [CHANGELOG.md](CHANGELOG.md)
 
-| Route | What it does |
-|---|---|
-| `GET /fetch?url=` | One-shot: throwaway browser, returns the rendered HTML |
-| `POST /sessions` | Start a browser. `201 {id}`, or `429` when the box is full |
-| `GET /sessions` | List live session ids |
-| `DELETE /sessions/:id` | Kill a session |
-| `POST /sessions/:id/goto?url=` | Navigate, wait for load, return HTML |
-| `GET /sessions/:id/content` | Current HTML |
-| `POST /sessions/:id/click` | `{selector}` or `{x,y}`. Real trusted click; `409` if hidden or covered |
-| `POST /sessions/:id/type` | `{text, selector?}` |
-| `POST /sessions/:id/press` | `{key}`: Enter, Tab, Backspace, Escape, arrow keys |
-| `POST /sessions/:id/eval` | Body is JS; returns `{value}` |
+## How it works
 
-`click` and `press Enter` return `navigated: true|false` and wait for the page load when one happens.
-
-## Config (env vars)
-
-| Var | Default | |
-|---|---|---|
-| `PORT` | 4000 | |
-| `MAX_SESSIONS` | 20 | Chromes per box; beyond this → 429 |
-| `IDLE_MS` | 300000 | Kill sessions with no requests for this long |
-| `MAX_LIFE_MS` | 1800000 | Hard lifetime ceiling per session |
-| `CHROME` | Playwright headless shell | Path to the Chromium binary |
+- **One Chromium per session, never reused.** Cookies and storage can't leak between agents.
+- **Driven over CDP on a pipe.** If tinfoil dies, the OS closes the pipe and every browser exits. No orphans.
+- **Admission control.** `MAX_SESSIONS` counts claimed + warm + booting Chromes. Past it you get `429` + `retry-after`.
+- **Janitor.** Reaps sessions after `IDLE_MS` without requests, or after `MAX_LIFE_MS` total.
+- **Warm pool.** `POOL_SIZE` booted Chromes wait inside the cap, so a claim takes ~1–9ms vs ~450ms cold.
 
 ## Layout
 
 ```
 src/
-  main.ts      entry: start server + janitor, kill browsers on exit
-  config.ts    every knob, env-overridable
-  cdp.ts       CDP client over a pipe (commands by id, events by name)
-  sessions.ts  spawn chrome per session, admission cap, idle/max-life janitor
-  input.ts     locate/click/type/press + settle (wait for navigation)
-  http.ts      routes
-experiments/   throwaway learning scripts
-journey/       build log: decisions, design, versions
+  index.ts              entry: start server, janitor, pool; kill browsers on exit
+  config.ts             every knob (env-overridable)
+  log.ts                structured one-line logs
+  cdp/client.ts         CDP over a pipe: commands by id, events by name, fail-fast on close
+  sessions/manager.ts   boot, warm pool, admission cap, janitor, kill
+  browser/actions.ts    locate / click / type / press / settle
+  api/
+    server.ts           match → handle → reply; the one place errors become HTTP
+    router.ts           tiny path router (:params), body parsing
+    errors.ts           HttpError + helpers
+    routes/sessions.ts  /sessions/*
+    routes/misc.ts      /health, /fetch
+test/api.test.ts        end-to-end against real Chromium
+docs/                   API reference
+playground/             throwaway experiments
+journey/                build log: decisions, design, benchmarks
 ```

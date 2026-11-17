@@ -1,7 +1,7 @@
 # tinfoil — STATE
 
 Building our own Steel (browser API for AI agents) from zero. Reference repo (READ-ONLY): ~/Desktop/browser
-Lang: TypeScript, Node 26 (runs .ts natively, no build). Run: `npm start` (port 4000). Code in src/ (main, config, cdp, sessions, input, http)
+Lang: TypeScript, Node 26 (runs .ts natively, no build). Run: `npm start` (port 4000), `npm run check` (typecheck + e2e). Layout in README.
 
 ## Milestone (session 1)
 Agent hits our server over HTTP, says "go to this URL", gets the page back as text.
@@ -12,7 +12,7 @@ v5.1: warm pool 5 (counts toward cap), empty → cold boot, used chrome KILLED n
 Scale drill done (discussion, in design.md): ~100 boxes/10k, CPU bites first, redis control plane, heartbeat TTL, 410 Gone.
 
 ## Next step
-v5.1 pool DONE. Next: notebook ⑤ (cap+janitor+pool+kill-not-reuse), user says it out loud first; recall quiz on ④+ still owed.
+v0.6 product restructure DONE (router, HttpError, /health, tests, docs). Tomorrow: close Steel gaps, start with #1 CDP passthrough (Puppeteer/Playwright connect; forces off pipe mode). Order: CDP passthrough → screenshot/md/pdf → stealth → live view → proxies/ext/docker → contexts. Notebook ⑤ + ④+ quiz still owed.
 
 ## Concepts discovered
 - rate limit = flow, cap = stock (box dies from stock)

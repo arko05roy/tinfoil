@@ -7,7 +7,7 @@ export type CDP = ReturnType<typeof connectCDP>;
 export function connectCDP(toChrome: Writable, fromChrome: Readable) {
   let nextId = 1;
   const pending = new Map<number, { ok: (v: any) => void; fail: (e: Error) => void }>(); // commands waiting for a reply
-  const waiters: { event: string; sessionId?: string; ok: (v: any) => void }[] = [];     // code waiting for an event
+  const waiters: { event: string; sessionId?: string; ok: (v: any) => void; fail: (e: Error) => void }[] = [];     // code waiting for an event
 
   const onMessage = (msg: any) => {
     if (msg.id) {                                   // reply to one of our commands
@@ -32,9 +32,19 @@ export function connectCDP(toChrome: Writable, fromChrome: Readable) {
     }
   });
 
+  // chrome died / pipe closed → nobody will ever answer. fail everything now instead of hanging.
+  let closed: Error | null = null;
+  fromChrome.on("close", () => {
+    closed = new Error("browser closed");
+    for (const p of pending.values()) p.fail(closed);
+    pending.clear();
+    for (const w of waiters.splice(0)) w.fail(closed);
+  });
+
   // sessionId = which target (tab) the message is for. none = the browser itself.
   const send = (method: string, params: object = {}, sessionId?: string) =>
     new Promise<any>((ok, fail) => {
+      if (closed) return fail(closed);
       const id = nextId++;
       pending.set(id, { ok, fail });
       toChrome.write(JSON.stringify({ id, method, params, sessionId }) + "\0");
@@ -42,7 +52,8 @@ export function connectCDP(toChrome: Writable, fromChrome: Readable) {
 
   const waitFor = (event: string, sessionId?: string, ms = 30_000) =>
     new Promise<any>((ok, fail) => {
-      const w = { event, sessionId, ok };
+      if (closed) return fail(closed);
+      const w = { event, sessionId, ok, fail };
       waiters.push(w);
       setTimeout(() => {
         const i = waiters.indexOf(w);

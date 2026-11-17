@@ -1,11 +1,12 @@
-// sessions: one chrome per session, in memory, die with the server.
+// session lifecycle: boot chromes, keep a warm pool, admit/refuse, reap. one chrome per session, never reused.
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
 import type { Readable, Writable } from "node:stream";
-import { connectCDP } from "./cdp.ts";
-import { CHROME, IDLE_MS, MAX_LIFE_MS, MAX_SESSIONS, POOL_SIZE, PROFILES } from "./config.ts";
+import { connectCDP } from "../cdp/client.ts";
+import { log } from "../log.ts";
+import { CHROME, IDLE_MS, MAX_LIFE_MS, MAX_SESSIONS, POOL_SIZE, PROFILES } from "../config.ts";
 
 export type Session = {
   id: string; proc: ChildProcess; profile: string;
@@ -14,7 +15,7 @@ export type Session = {
   waitFor: (event: string, ms?: number) => Promise<any>;
 };
 
-export const sessions = new Map<string, Session>(); // claimed by an agent
+const sessions = new Map<string, Session>();        // claimed by an agent
 const pool: Session[] = [];                          // booted, unclaimed, never touched by anyone
 let starting = 0; // chromes mid-boot count against the cap too, or 50 parallel POSTs all sneak past
 const total = () => sessions.size + pool.length + starting; // every chrome on this box
@@ -22,6 +23,12 @@ const total = () => sessions.size + pool.length + starting; // every chrome on t
 rmSync(PROFILES, { recursive: true, force: true }); // sessions live in memory, so anything on disk at boot is garbage
 
 export class FullError extends Error {}
+
+export const getSession = (id: string) => sessions.get(id);
+// unlist first so no new request can reach it, then kill. exit handler does the disk cleanup.
+export function killSession(s: Session) { sessions.delete(s.id); s.proc.kill(); }
+export const listSessions = () => [...sessions.keys()];
+export const stats = () => ({ active: sessions.size, warm: pool.length, booting: starting });
 
 // warm chrome if we have one (~0ms), else cold boot. either way it's fresh: chromes are never reused.
 export async function createSession(): Promise<Session> {
@@ -39,7 +46,7 @@ export async function createSession(): Promise<Session> {
 // top the pool back up to POOL_SIZE, without ever pushing the box past MAX_SESSIONS
 export function refill() {
   while (pool.length + starting < POOL_SIZE && total() < MAX_SESSIONS) {
-    boot().then((s) => pool.push(s), (e) => console.error(`warm boot failed: ${e.message}`));
+    boot().then((s) => pool.push(s), (e) => log.error("pool.boot_failed", { err: e.message }));
   }
 }
 
@@ -86,7 +93,7 @@ export function startJanitor() {
     const now = Date.now();
     for (const s of sessions.values()) {
       const why = now - s.lastUsed > IDLE_MS ? "idle" : now - s.createdAt > MAX_LIFE_MS ? "max-life" : null;
-      if (why) { console.log(`session ${s.id.slice(0, 8)} reaped (${why})`); s.proc.kill(); }
+      if (why) { log.info("session.reaped", { id: s.id.slice(0, 8), why }); killSession(s); }
     }
   }, 5_000).unref();
 }
