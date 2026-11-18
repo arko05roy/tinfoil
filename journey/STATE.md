@@ -11,6 +11,11 @@ v5: cap 20/box (429+retry-after), idle 5min + max-life 30min janitor. Restructur
 v5.1: warm pool 5 (counts toward cap), empty → cold boot, used chrome KILLED never reused. claim 1–9ms vs ~450ms cold.
 Scale drill done (discussion, in design.md): ~100 boxes/10k, CPU bites first, redis control plane, heartbeat TTL, 410 Gone.
 
+## Session 2026-11-18 (short)
+Recall quiz asked (kill -9 / el.click vs CDP Input / why kill pool chrome) - UNANSWERED, ask again first.
+CDP passthrough: user said api key (= auth, not transport), then invented relay proxy (server forwards ws<->pipe both ways). Concept: relay proxy / middleman = control point.
+OPEN DECISION: A) proxy over pipe (keep fate-share, no open port; hidden trap = our own cmd ids collide w/ theirs on same pipe - let them hit it) vs B) --remote-debugging-port + proxy to chrome ws (orphans back, open port bypasses auth). I recommended A. User to pick.
+
 ## Next step
 v0.6 product restructure DONE (router, HttpError, /health, tests, docs). Tomorrow: close Steel gaps, start with #1 CDP passthrough (Puppeteer/Playwright connect; forces off pipe mode). Order: CDP passthrough → screenshot/md/pdf → stealth → live view → proxies/ext/docker → contexts. Notebook ⑤ + ④+ quiz still owed.
 
